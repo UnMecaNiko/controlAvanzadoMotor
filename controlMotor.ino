@@ -12,10 +12,15 @@
 #define hallSensorA 18    //pin
 #define hallSensorB 19    //pin
 
-#define timeMotor 500     //(miliseconds) 
+#define timeMotor 1000     //(miliseconds) 
 //current sensor
 //sda   pin 21
 //scl   pin 22
+//          **  PWM
+// setting PWM properties
+const int freq = 2500;
+const int PWMChannel = 8;
+const int resolution = 12;
 
 //    *************     variables
 
@@ -43,8 +48,6 @@ portMUX_TYPE synch = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 
 
-
-
 void IRAM_ATTR isr() {  
   // Interrupt Service Routine
   portENTER_CRITICAL(&synch);
@@ -67,7 +70,7 @@ void setup() {
   Serial.begin(115200);
 
   // H-bridge
-  pinMode(in1HBridge, OUTPUT);
+  //pinMode(in1HBridge, OUTPUT);
   pinMode(in2HBridge, OUTPUT);
 
   //current sensor
@@ -85,6 +88,15 @@ void setup() {
   timerAlarmWrite(timer, sampleTime, true); // in microseconds
   timerAlarmEnable(timer); // enable
 
+  //            **    pwm
+
+  // configure LED PWM functionalitites
+  ledcSetup(PWMChannel, freq, resolution);
+  ledcSetup(PWMChannel+1, freq, resolution);
+  // attach the channel to the GPIO to be controlled
+  ledcAttachPin(in1HBridge, PWMChannel);
+  ledcAttachPin(in2HBridge, PWMChannel+1);
+
 }
 
 void loop() {
@@ -93,8 +105,16 @@ void loop() {
   if (samples>=(timeMotor/(sampleTime/1000.00))){
 
     //change direction of rotation
-    digitalWrite(in2HBridge,direction);
-    digitalWrite(in1HBridge,!direction);
+
+    if(direction){
+      ledcWrite(PWMChannel,2000);
+      ledcWrite(PWMChannel+1,0);
+    }
+    else{
+      ledcWrite(PWMChannel,0);
+      ledcWrite(PWMChannel+1,1000);
+    }
+    
 
     direction=!direction;
     samples=0;
