@@ -43,6 +43,8 @@ portMUX_TYPE synch = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 
 
+
+
 void IRAM_ATTR isr() {  
   // Interrupt Service Routine
   portENTER_CRITICAL(&synch);
@@ -73,9 +75,6 @@ void setup() {
   ina226.init();
   ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
 
-
-
-
   //hall Sensor (configure an interrupt to count pulses per sample)
   attachInterrupt(hallSensorA, isr, RISING);
   attachInterrupt(hallSensorB, isr, RISING);
@@ -85,9 +84,6 @@ void setup() {
   timerAttachInterrupt(timer, &onTimer, true); // edge (not level) triggered 
   timerAlarmWrite(timer, sampleTime, true); // in microseconds
   timerAlarmEnable(timer); // enable
-
-  
-
 
 }
 
@@ -112,9 +108,8 @@ void loop() {
       pulses=pulses*(-1);
     }
 
-
     Serial.print(pulses);
-    Serial.print(",");
+    Serial.print("\t");
     Serial.println(current_mA);
     flagSample=0;
     pulses=0;
