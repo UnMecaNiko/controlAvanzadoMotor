@@ -13,14 +13,16 @@
 #define hallSensorB 19    //pin
 
 #define timeMotor 1000     //(miliseconds) 
-//current sensor
+#define VCC       12
+//current sensor  
 //sda   pin 21
 //scl   pin 22
 //          **  PWM
 // setting PWM properties
 const int freq = 2500;
-const int PWMChannel = 8;
+const int PWMChannel = 6;
 const int resolution = 12;
+const int rangePWM = pow(2,12);
 
 //    *************     variables
 
@@ -36,7 +38,6 @@ volatile bool flagSample=0;
 
 bool direction = false; 
 
-
 //    current sensor
 INA226_WE ina226 = INA226_WE(I2C_ADDRESS);
 float current_mA = 0.0;
@@ -46,6 +47,22 @@ float current_mA = 0.0;
 //that we use in other parts of the code
 portMUX_TYPE synch = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
+
+
+// control del motor
+
+float reference = 0;
+float voltMotor = 0;
+float errorAct     = 0;
+
+float r0=   9.5511;
+float r1=   -18.0914;
+float r2=	  8.5702;
+
+float error[] ={0,0};
+float out[]   ={0,0};
+
+float dutyPWM = 0;
 
 
 void IRAM_ATTR isr() {  
@@ -68,22 +85,20 @@ void IRAM_ATTR onTimer(){
 
 void setup() {
   Serial.begin(115200);
-
-  // H-bridge
-  //pinMode(in1HBridge, OUTPUT);
-  pinMode(in2HBridge, OUTPUT);
+  Serial.println("setup");
 
   //current sensor
   Wire.begin();
   ina226.init();
-  ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
+  //ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
 
   //hall Sensor (configure an interrupt to count pulses per sample)
   attachInterrupt(hallSensorA, isr, RISING);
   attachInterrupt(hallSensorB, isr, RISING);
  
   //start timer
-  timer = timerBegin(0, 80, true);  // timer 0, MWDT clock period = 12.5 ns * TIMGn_Tx_WDT_CLK_PRESCALE -> 12.5 ns * 80 -> 1000 ns = 1 us, countUp
+  timer = timerBegin(0, 80, true);  
+  // timer 0, MWDT clock period = 12.5 ns * TIMGn_Tx_WDT_CLK_PRESCALE -> 12.5 ns * 80 -> 1000 ns = 1 us, countUp
   timerAttachInterrupt(timer, &onTimer, true); // edge (not level) triggered 
   timerAlarmWrite(timer, sampleTime, true); // in microseconds
   timerAlarmEnable(timer); // enable
@@ -96,38 +111,45 @@ void setup() {
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(in1HBridge, PWMChannel);
   ledcAttachPin(in2HBridge, PWMChannel+1);
+  Serial.println("end setup");
 
+  
 }
 
 void loop() {
-  //vTaskDelay(portMAX_DELAY); // wait as much as posible ...
 
-  if (samples>=(timeMotor/(sampleTime/1000.00))){
-
-    //change direction of rotation
-
-    if(direction){
-      ledcWrite(PWMChannel,2000);
-      ledcWrite(PWMChannel+1,0);
-    }
-    else{
-      ledcWrite(PWMChannel,0);
-      ledcWrite(PWMChannel+1,1000);
-    }
-    
-
-    direction=!direction;
-    samples=0;
+  if(Serial.available() > 0) {
+    String recievedData = Serial.readString();
+    reference = recievedData.toFloat();
   }
+
+
+  
+
   if(flagSample==1)
   {
     ina226.readAndClearFlags();
     current_mA = ina226.getCurrent_mA();
 
-    if (direction==0){
-      pulses=pulses*(-1);
-    }
+    errorAct=reference-current_mA;
 
+    voltMotor=r0*errorAct+r1*error[0]+r2*error[1]+2*out[0]-out[1];
+
+    if (voltMotor>VCC) voltMotor=VCC;
+    if (voltMotor<-VCC) voltMotor=-VCC;
+
+    error[1]=error[0];
+	  error[0]=errorAct;
+
+	  out[1]=out[0];
+	  out[0]=voltMotor;
+
+    dutyPWM = voltMotor*rangePWM/VCC;
+
+    ledcWrite(PWMChannel,dutyPWM);
+    ledcWrite(PWMChannel+1,0);
+
+    if (direction==0) pulses=pulses*(-1); 
     Serial.print(pulses);
     Serial.print("\t");
     Serial.println(current_mA);
@@ -135,4 +157,19 @@ void loop() {
     pulses=0;
   }
 
+  // if (samples>=(timeMotor/(sampleTime/1000.00))){
+  //   //change direction of rotation
+
+  //   if(direction){
+  //     ledcWrite(PWMChannel,2000);
+  //     ledcWrite(PWMChannel+1,0);
+  //   }
+  //   else{
+  //     ledcWrite(PWMChannel,0);
+  //     ledcWrite(PWMChannel+1,1000);
+  //   }
+    
+  //   direction=!direction;
+  //   samples=0;
+  // }
 }
