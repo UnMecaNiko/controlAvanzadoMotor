@@ -6,8 +6,8 @@
 //    ************      parameters
 #define sampleTime 2000 //(usegs)
 
-#define in1HBridge 33   //pin
-#define in2HBridge 32   //pin
+#define in1HBridge 4   //pin
+#define in2HBridge 2   //pin
 
 #define hallSensorA 18    //pin
 #define hallSensorB 19    //pin
