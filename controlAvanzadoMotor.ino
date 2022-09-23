@@ -4,7 +4,7 @@
 #define I2C_ADDRESS 0x40
 
 //    ************      parameters
-#define sampleTime 2000 //(usegs)
+#define sampleTime 3000 //(usegs)
 
 #define in1HBridge 4   //pin
 #define in2HBridge 2   //pin
@@ -51,13 +51,17 @@ portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 
 // control del motor
 
-float reference = 0;
+float reference = 300;
+float actualRef = 0;
+float slopeRef  = 300;
+float stepRef = slopeRef*sampleTime/1000000;
 float voltMotor = 0;
 float errorAct     = 0;
 
-float r0=   9.5511;
-float r1=   -18.0914;
-float r2=	  8.5702;
+float q0=   -1256.3;
+float q1=   2484.8;
+float q2=	  -1224.6;
+float s0=   0.9932;
 
 float error[] ={0,0};
 float out[]   ={0,0};
@@ -90,7 +94,7 @@ void setup() {
   //current sensor
   Wire.begin();
   ina226.init();
-  //ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
+  ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
 
   //hall Sensor (configure an interrupt to count pulses per sample)
   attachInterrupt(hallSensorA, isr, RISING);
@@ -111,9 +115,7 @@ void setup() {
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(in1HBridge, PWMChannel);
   ledcAttachPin(in2HBridge, PWMChannel+1);
-  Serial.println("end setup");
-
-  
+  Serial.println("end setup"); 
 }
 
 void loop() {
@@ -121,19 +123,20 @@ void loop() {
   if(Serial.available() > 0) {
     String recievedData = Serial.readString();
     reference = recievedData.toFloat();
+    
   }
-
-
-  
 
   if(flagSample==1)
   {
+    if(actualRef<reference) actualRef+=stepRef;
+    if(actualRef>reference) actualRef-=stepRef;
+
     ina226.readAndClearFlags();
     current_mA = ina226.getCurrent_mA();
 
-    errorAct=reference-current_mA;
+    errorAct=actualRef-current_mA;
 
-    voltMotor=r0*errorAct+r1*error[0]+r2*error[1]+2*out[0]-out[1];
+    voltMotor=q0*errorAct+q1*error[0]+q2*error[1]+(s0+1)*out[0]-s0*out[1];
 
     if (voltMotor>VCC) voltMotor=VCC;
     if (voltMotor<-VCC) voltMotor=-VCC;
@@ -144,13 +147,21 @@ void loop() {
 	  out[1]=out[0];
 	  out[0]=voltMotor;
 
-    dutyPWM = voltMotor*rangePWM/VCC;
+    dutyPWM = abs(voltMotor)*rangePWM/VCC;
 
-    ledcWrite(PWMChannel,dutyPWM);
-    ledcWrite(PWMChannel+1,0);
-
+    if(voltMotor>0){
+      ledcWrite(PWMChannel,dutyPWM);
+      ledcWrite(PWMChannel+1,0);
+    }
+    else{
+      ledcWrite(PWMChannel,0);
+      ledcWrite(PWMChannel+1,dutyPWM);
+    }
+    
     if (direction==0) pulses=pulses*(-1); 
-    Serial.print(pulses);
+    Serial.print(actualRef);
+    Serial.print("\t");
+    Serial.print(voltMotor);
     Serial.print("\t");
     Serial.println(current_mA);
     flagSample=0;
