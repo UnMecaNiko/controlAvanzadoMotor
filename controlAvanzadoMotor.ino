@@ -20,7 +20,8 @@
 //          **  PWM
 // setting PWM properties
 const int freq = 2500;
-const int PWMChannel = 6;
+const int PWMChannelA = 6;
+const int PWMChannelB = 7;
 const int resolution = 12;
 const int rangePWM = pow(2,12);
 
@@ -40,7 +41,7 @@ bool direction = false;
 
 //    current sensor
 INA226_WE ina226 = INA226_WE(I2C_ADDRESS);
-float current_mA = 0.0;
+float current_A = 0.0;
 
 // *****    interrupt (isr)
 //we use this tipe of variable because we change variables
@@ -51,9 +52,9 @@ portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 
 // control del motor
 
-float reference = 300;
+float reference = 0.7;    //Amperes
 float actualRef = 0;
-float slopeRef  = 300;
+float slopeRef  = 0.5;
 float stepRef = slopeRef*sampleTime/1000000;
 float voltMotor = 0;
 float errorAct     = 0;
@@ -110,11 +111,11 @@ void setup() {
   //            **    pwm
 
   // configure LED PWM functionalitites
-  ledcSetup(PWMChannel, freq, resolution);
-  ledcSetup(PWMChannel+1, freq, resolution);
+  ledcSetup(PWMChannelA, freq, resolution);
+  ledcSetup(PWMChannelB, freq, resolution);
   // attach the channel to the GPIO to be controlled
-  ledcAttachPin(in1HBridge, PWMChannel);
-  ledcAttachPin(in2HBridge, PWMChannel+1);
+  ledcAttachPin(in1HBridge, PWMChannelA);
+  ledcAttachPin(in2HBridge, PWMChannelB);
   Serial.println("end setup"); 
 }
 
@@ -127,14 +128,15 @@ void loop() {
   }
 
   if(flagSample==1)
-  {
+  { 
+    //script when ther samples makes
     if(actualRef<reference) actualRef+=stepRef;
     if(actualRef>reference) actualRef-=stepRef;
 
     ina226.readAndClearFlags();
-    current_mA = ina226.getCurrent_mA();
+    current_A = ina226.getCurrent_mA()/1000.0000;
 
-    errorAct=actualRef-current_mA;
+    errorAct=actualRef-current_A;
 
     voltMotor=q0*errorAct+q1*error[0]+q2*error[1]+(s0+1)*out[0]-s0*out[1];
 
@@ -150,12 +152,13 @@ void loop() {
     dutyPWM = abs(voltMotor)*rangePWM/VCC;
 
     if(voltMotor>0){
-      ledcWrite(PWMChannel,dutyPWM);
-      ledcWrite(PWMChannel+1,0);
+      //when PWMChannelB = 0 positive current
+      ledcWrite(PWMChannelB,0);
+      ledcWrite(PWMChannelA,dutyPWM);
     }
     else{
-      ledcWrite(PWMChannel,0);
-      ledcWrite(PWMChannel+1,dutyPWM);
+      ledcWrite(PWMChannelB,dutyPWM);
+      ledcWrite(PWMChannelA,0);
     }
     
     if (direction==0) pulses=pulses*(-1); 
@@ -163,7 +166,7 @@ void loop() {
     Serial.print("\t");
     Serial.print(voltMotor);
     Serial.print("\t");
-    Serial.println(current_mA);
+    Serial.println(current_A);
     flagSample=0;
     pulses=0;
   }
