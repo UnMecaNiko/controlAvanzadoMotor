@@ -4,7 +4,7 @@
 #define I2C_ADDRESS 0x40
 
 //    ************      parameters
-#define sampleTime 3000 //(usegs)
+#define sampleTime 5000 //(usegs)
 
 #define in1HBridge 4   //pin
 #define in2HBridge 2   //pin
@@ -52,17 +52,17 @@ portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 
 // control del motor
 
-float reference = 0.7;    //Amperes
+float reference = 0.5;    //Amperes
 float actualRef = 0;
-float slopeRef  = 0.5;
+float slopeRef  = 0.2;
 float stepRef = slopeRef*sampleTime/1000000;
 float voltMotor = 0;
 float errorAct     = 0;
 
-float q0=   -1256.3;
-float q1=   2484.8;
-float q2=	  -1224.6;
-float s0=   0.9932;
+float q0=   2.12;
+float q1=   0.8838;
+float q2=	  0;
+float s0=   0 ;
 
 float error[] ={0,0};
 float out[]   ={0,0};
@@ -85,13 +85,11 @@ void IRAM_ATTR onTimer(){
   flagSample=1;
   //Serial.println(pulses);
   portEXIT_CRITICAL_ISR(&timerMux0);
-
 }
 
 void setup() {
   Serial.begin(115200);
   Serial.println("setup");
-
   //current sensor
   Wire.begin();
   ina226.init();
@@ -116,6 +114,7 @@ void setup() {
   // attach the channel to the GPIO to be controlled
   ledcAttachPin(in1HBridge, PWMChannelA);
   ledcAttachPin(in2HBridge, PWMChannelB);
+  Serial.flush();
   Serial.println("end setup"); 
 }
 
@@ -124,12 +123,10 @@ void loop() {
   if(Serial.available() > 0) {
     String recievedData = Serial.readString();
     reference = recievedData.toFloat();
-    
   }
 
   if(flagSample==1)
-  { 
-    //script when ther samples makes
+  { //script when a sample is made
     if(actualRef<reference) actualRef+=stepRef;
     if(actualRef>reference) actualRef-=stepRef;
 
@@ -138,7 +135,7 @@ void loop() {
 
     errorAct=actualRef-current_A;
 
-    voltMotor=q0*errorAct+q1*error[0]+q2*error[1]+(s0+1)*out[0]-s0*out[1];
+    voltMotor=q0*errorAct+q1*error[0]+q2*error[1]-(s0-1)*out[0]+s0*out[1];
 
     if (voltMotor>VCC) voltMotor=VCC;
     if (voltMotor<-VCC) voltMotor=-VCC;
@@ -160,13 +157,12 @@ void loop() {
       ledcWrite(PWMChannelB,dutyPWM);
       ledcWrite(PWMChannelA,0);
     }
-    
     if (direction==0) pulses=pulses*(-1); 
-    Serial.print(actualRef);
+    Serial.print(actualRef,3);
     Serial.print("\t");
-    Serial.print(voltMotor);
+    Serial.print(voltMotor,3);
     Serial.print("\t");
-    Serial.println(current_A);
+    Serial.println(current_A,3);
     flagSample=0;
     pulses=0;
   }
