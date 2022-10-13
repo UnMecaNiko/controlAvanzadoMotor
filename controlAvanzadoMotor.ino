@@ -59,10 +59,10 @@ float stepRef = slopeRef*sampleTime/1000000;
 float voltMotor = 0;
 float errorAct     = 0;
 
-float q0=   15.7769;
-float q1=   -15.6914;
-float q2=	  0;
-float s0=   -0.9958;
+float q0=   0;
+float q1=   6.4117;
+float q2=	  -5.91;
+float s0=   -0.993;
 
 float error[] ={0,0};
 float out[]   ={0,0};
