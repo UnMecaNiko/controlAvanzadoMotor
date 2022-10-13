@@ -4,7 +4,7 @@
 #define I2C_ADDRESS 0x40
 
 //    ************      parameters
-#define sampleTime 5000 //(usegs)
+#define sampleTime 4000 //(usegs)
 
 #define in1HBridge 4   //pin
 #define in2HBridge 2   //pin
@@ -60,9 +60,9 @@ float voltMotor = 0;
 float errorAct     = 0;
 
 float q0=   0;
-float q1=   6.4117;
-float q2=	  -5.91;
-float s0=   -0.993;
+float q1=   5.63;
+float q2=	  -5.25;
+float s0=   -0.99;
 
 float error[] ={0,0};
 float out[]   ={0,0};
