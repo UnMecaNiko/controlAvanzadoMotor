@@ -53,8 +53,7 @@ portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 
 // control del motor
 
-
-float referenceN = 0.7;    //Newton * meter
+float referenceN = 0.7;    //Newton * meter -Max: 0.84
 float referenceA = referenceN / Ka;
 float actualRef = 0;
 float slopeRef  = 0.2;
