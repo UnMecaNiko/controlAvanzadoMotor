@@ -4,7 +4,7 @@
 #define I2C_ADDRESS 0x40
 
 //    ************      parameters
-#define sampleTime 4000 //(usegs)
+#define sampleTime 5000 //(usegs)
 
 #define in1HBridge 4   //pin
 #define in2HBridge 2   //pin
@@ -50,30 +50,30 @@ float current_A = 0.0;
 portMUX_TYPE synch = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 
-
 // control del motor
 
 float referenceN = 0.7;    //Newton * meter -Max: 0.84
 float referenceA = referenceN / Ka;
 float actualRef = 0;
-float slopeRef  = 0.2;
 float period =    10;
-float stepRef = slopeRef*sampleTime/1000000;
+float slopeRef  = 4*referenceA/period;   //[A/s]
+
+int referenceType = 2;   //1.square 2.triangle 3.sin
+
+float sampleTimeSec=sampleTime/1000000;
+float stepRef = slopeRef*sampleTimeSec;
 float voltMotor = 0;
-float errorAct     = 0;
+float errorAct = 0;
 
 float q0=   0;
 float q1=   5.4315;
 float q2=	  -5.069;
 float s0=   -0.9969;
 
-
-
 float error[] ={0,0};
 float out[]   ={0,0};
 
 float dutyPWM = 0;
-
 
 void IRAM_ATTR isr() {  
   // Interrupt Service Routine
@@ -126,20 +126,35 @@ void setup() {
 void loop() {
 
   if(Serial.available() > 0) {
+
     String recievedData = Serial.readString();
     referenceN = recievedData.toFloat();
     referenceA = referenceN / Ka;
-  }
+  }  
 
   if(flagSample==1)
   { //script when a sample is made
-    if(actualRef<referenceA) actualRef+=stepRef;
-    if(actualRef>referenceA) actualRef-=stepRef;
 
-    // if(abs(actualRef)>abs(referenceA)-0.005) referenceA=referenceA*-1;
+    
+    if (referenceType==1)
+    {
+      if((samples%(period/sampleTimeSec))==0){
+        actualRef=referenceA*-1;
+        referenceA=referenceA*-1;
+      }
+    }
+    if (referenceType==2)
+    {
+      if(actualRef<referenceA) actualRef+=stepRef; //actualizar
+      if(actualRef>referenceA) actualRef-=stepRef;
 
-    //Seguimiento senosoidal
-    //actualRef=referenceA*sin(6.2832*sampleTime*samples/period);
+      if(abs(actualRef)>abs(referenceA)-0.001) referenceA=referenceA*-1;
+    }
+    if (referenceType==2)
+    {
+      //Seguimiento senosoidal
+      actualRef=referenceA*sin(6.2832*sampleTimeSec*samples/period);
+    }
 
     ina226.readAndClearFlags();
     current_A = ina226.getCurrent_mA()/1000.0000;
