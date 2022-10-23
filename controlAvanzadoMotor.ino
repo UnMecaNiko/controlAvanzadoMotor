@@ -4,7 +4,7 @@
 #define I2C_ADDRESS 0x40
 
 //    ************      parameters
-#define sampleTime 5000 //(usegs)
+#define sampleTime 4000 //(usegs)
 
 #define in1HBridge 4   //pin
 #define in2HBridge 2   //pin
@@ -14,6 +14,7 @@
 
 #define timeMotor 1000     //(miliseconds) 
 #define VCC       12
+#define Ka        1.4048   // N*m/A
 //current sensor  
 //sda   pin 21
 //scl   pin 22
@@ -52,17 +53,21 @@ portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 
 // control del motor
 
-float reference = 0.5;    //Amperes
+float referenceN = 0.7;    //Newton * meter -Max: 0.84
+float referenceA = referenceN / Ka;
 float actualRef = 0;
 float slopeRef  = 0.2;
+float period =    10;
 float stepRef = slopeRef*sampleTime/1000000;
 float voltMotor = 0;
 float errorAct     = 0;
 
-float q0=   15.7769;
-float q1=   -15.6914;
-float q2=	  0;
-float s0=   -0.9958;
+float q0=   0;
+float q1=   5.4315;
+float q2=	  -5.069;
+float s0=   -0.9969;
+
+
 
 float error[] ={0,0};
 float out[]   ={0,0};
@@ -122,13 +127,19 @@ void loop() {
 
   if(Serial.available() > 0) {
     String recievedData = Serial.readString();
-    reference = recievedData.toFloat();
+    referenceN = recievedData.toFloat();
+    referenceA = referenceN / Ka;
   }
 
   if(flagSample==1)
   { //script when a sample is made
-    if(actualRef<reference) actualRef+=stepRef;
-    if(actualRef>reference) actualRef-=stepRef;
+    if(actualRef<referenceA) actualRef+=stepRef;
+    if(actualRef>referenceA) actualRef-=stepRef;
+
+    // if(abs(actualRef)>abs(referenceA)-0.005) referenceA=referenceA*-1;
+
+    //Seguimiento senosoidal
+    //actualRef=referenceA*sin(6.2832*sampleTime*samples/period);
 
     ina226.readAndClearFlags();
     current_A = ina226.getCurrent_mA()/1000.0000;
@@ -158,11 +169,11 @@ void loop() {
       ledcWrite(PWMChannelA,0);
     }
     if (direction==0) pulses=pulses*(-1); 
-    Serial.print(actualRef,3);
+    Serial.print(actualRef*Ka,3);
     Serial.print("\t");
     Serial.print(voltMotor,3);
     Serial.print("\t");
-    Serial.println(current_A,3);
+    Serial.println(current_A*Ka,3);
     flagSample=0;
     pulses=0;
   }
