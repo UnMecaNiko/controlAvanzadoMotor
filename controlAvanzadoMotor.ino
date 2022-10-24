@@ -24,7 +24,7 @@ const int freq = 2500;
 const int PWMChannelA = 6;
 const int PWMChannelB = 7;
 const int resolution = 12;
-const int rangePWM = pow(2,12);
+const int rangePWM = pow(2,resolution);
 
 //    *************     variables
 
@@ -78,41 +78,129 @@ float dutyPWM = 0;
 void IRAM_ATTR isr() {  
   // Interrupt Service Routine
   portENTER_CRITICAL(&synch);
-  //
   pulses += 1;
   portEXIT_CRITICAL(&synch);
 }
 
 void IRAM_ATTR onTimer(){
   portENTER_CRITICAL_ISR(&timerMux0);
-
   samples=samples+1;
   flagSample=1;
-  //Serial.println(pulses);
   portEXIT_CRITICAL_ISR(&timerMux0);
+}
+
+void updateStepRef(){
+  slopeRef  = 4*referenceA/period;
+  stepRef   = slopeRef*sampleTimeSec;
+}
+
+void updateData(){
+  char option=Serial.read();
+
+  if(option=='C'){ //Configurar control
+    //C{q0},{q1},{q2},{s0}
+    q0=Serial.parseFloat();
+    q1=Serial.parseFloat();
+    q2=Serial.parseFloat();
+    s0=Serial.parseFloat();
+  }
+  if(option=='R'){  //configurar referencia
+    //R{referenceType},{referenceN},{period}
+    referenceType =Serial.parseFloat();
+    referenceN    =Serial.parseFloat();
+    period        =Serial.parseFloat();
+
+    referenceA = referenceN / Ka;
+    if(referenceType==2) updateStepRef();1
+  }
+  Serial.readString(); //clear buffer
+}
+
+void sentData(){
+  Serial.print(actualRef*Ka,3);
+  Serial.print("\t");
+  Serial.print(current_A*Ka,3);
+  Serial.print("\t");
+  Serial.print(voltMotor,3);
+  Serial.print("\t");
+  Serial.print(pulses,3);
+  Serial.print("\n");
+}
+
+void sampleProcess(){
+  switch (referenceType){
+    case 1: //Step Reference
+      if( ( samples%(period/sampleTimeSec) ) ==0 ){
+        actualRef=referenceA*-1;
+        referenceA=referenceA*-1;
+      }
+      break;
+    case 2: //Triangle Reference
+      if(actualRef<referenceA) actualRef+=stepRef;
+      if(actualRef>referenceA) actualRef-=stepRef;
+
+      if(abs(actualRef)>abs(referenceA)-0.001) referenceA=referenceA*-1;
+      break;
+    case 3: //Sin Reference
+      actualRef=referenceA*sin(6.2832*sampleTimeSec*samples/period);
+      break;
+    default:
+      Serial.println("errorTypeReference");
+      break;
+  }
+  //Read sensor
+  ina226.readAndClearFlags();
+  current_A = ina226.getCurrent_mA()/1000.0000;
+  //Calculate error
+  errorAct=actualRef-current_A;
+  //Diference Ecuation
+  voltMotor=q0*errorAct+q1*error[0]+q2*error[1]-(s0-1)*out[0]+s0*out[1];
+  //Saturation
+  if (voltMotor>VCC) voltMotor=VCC;
+  if (voltMotor<-VCC) voltMotor=-VCC;
+
+  error[1]=error[0];
+  error[0]=errorAct;
+  out[1]=out[0];
+  out[0]=voltMotor;
+
+  dutyPWM = abs(voltMotor)*rangePWM/VCC;
+
+  if(voltMotor>0){
+    //when PWMChannelB = 0 positive current
+    ledcWrite(PWMChannelB,0);
+    ledcWrite(PWMChannelA,dutyPWM);
+  }
+  else{
+    ledcWrite(PWMChannelB,dutyPWM);
+    ledcWrite(PWMChannelA,0);
+  }
+  if (direction==0) pulses=pulses*(-1); 
+
+  //Sent information
+  sentData();
+  //Reset variables
+  pulses=0;
 }
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("setup");
+  Serial.println("start setup");
   //current sensor
   Wire.begin();
   ina226.init();
   ina226.waitUntilConversionCompleted(); //if you comment this line the first data might be zero
-
   //hall Sensor (configure an interrupt to count pulses per sample)
   attachInterrupt(hallSensorA, isr, RISING);
   attachInterrupt(hallSensorB, isr, RISING);
- 
   //start timer
   timer = timerBegin(0, 80, true);  
-  // timer 0, MWDT clock period = 12.5 ns * TIMGn_Tx_WDT_CLK_PRESCALE -> 12.5 ns * 80 -> 1000 ns = 1 us, countUp
+  // timer 0, MWDT clock period = 
+  // 12.5 ns * TIMGn_Tx_WDT_CLK_PRESCALE -> 12.5 ns * 80 -> 1000 ns = 1 us, countUp
   timerAttachInterrupt(timer, &onTimer, true); // edge (not level) triggered 
   timerAlarmWrite(timer, sampleTime, true); // in microseconds
-  timerAlarmEnable(timer); // enable
-
+  timerAlarmEnable(timer); // enable timer
   //            **    pwm
-
   // configure LED PWM functionalitites
   ledcSetup(PWMChannelA, freq, resolution);
   ledcSetup(PWMChannelB, freq, resolution);
@@ -126,86 +214,11 @@ void setup() {
 void loop() {
 
   if(Serial.available() > 0) {
-
-    String recievedData = Serial.readString();
-    referenceN = recievedData.toFloat();
-    referenceA = referenceN / Ka;
+    updateData();
   }  
-
-  if(flagSample==1)
-  { //script when a sample is made
-
-    
-    if (referenceType==1)
-    {
-      if((samples%(period/sampleTimeSec))==0){
-        actualRef=referenceA*-1;
-        referenceA=referenceA*-1;
-      }
-    }
-    if (referenceType==2)
-    {
-      if(actualRef<referenceA) actualRef+=stepRef; //actualizar
-      if(actualRef>referenceA) actualRef-=stepRef;
-
-      if(abs(actualRef)>abs(referenceA)-0.001) referenceA=referenceA*-1;
-    }
-    if (referenceType==2)
-    {
-      //Seguimiento senosoidal
-      actualRef=referenceA*sin(6.2832*sampleTimeSec*samples/period);
-    }
-
-    ina226.readAndClearFlags();
-    current_A = ina226.getCurrent_mA()/1000.0000;
-
-    errorAct=actualRef-current_A;
-
-    voltMotor=q0*errorAct+q1*error[0]+q2*error[1]-(s0-1)*out[0]+s0*out[1];
-
-    if (voltMotor>VCC) voltMotor=VCC;
-    if (voltMotor<-VCC) voltMotor=-VCC;
-
-    error[1]=error[0];
-	  error[0]=errorAct;
-
-	  out[1]=out[0];
-	  out[0]=voltMotor;
-
-    dutyPWM = abs(voltMotor)*rangePWM/VCC;
-
-    if(voltMotor>0){
-      //when PWMChannelB = 0 positive current
-      ledcWrite(PWMChannelB,0);
-      ledcWrite(PWMChannelA,dutyPWM);
-    }
-    else{
-      ledcWrite(PWMChannelB,dutyPWM);
-      ledcWrite(PWMChannelA,0);
-    }
-    if (direction==0) pulses=pulses*(-1); 
-    Serial.print(actualRef*Ka,3);
-    Serial.print("\t");
-    Serial.print(voltMotor,3);
-    Serial.print("\t");
-    Serial.println(current_A*Ka,3);
+  if(flagSample==1) { //script when a sample is made
+    sampleProcess();
     flagSample=0;
-    pulses=0;
   }
 
-  // if (samples>=(timeMotor/(sampleTime/1000.00))){
-  //   //change direction of rotation
-
-  //   if(direction){
-  //     ledcWrite(PWMChannel,2000);
-  //     ledcWrite(PWMChannel+1,0);
-  //   }
-  //   else{
-  //     ledcWrite(PWMChannel,0);
-  //     ledcWrite(PWMChannel+1,1000);
-  //   }
-    
-  //   direction=!direction;
-  //   samples=0;
-  // }
 }
