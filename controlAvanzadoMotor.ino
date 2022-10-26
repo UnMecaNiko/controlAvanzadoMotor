@@ -38,8 +38,6 @@ hw_timer_t * timer = NULL;
 volatile int samples=0;
 volatile bool flagSample=0;
 
-bool direction = false; 
-
 //    current sensor
 INA226_WE ina226 = INA226_WE(I2C_ADDRESS);
 float current_A = 0.0;
@@ -60,7 +58,7 @@ float slopeRef  = 4*referenceA/period;   //[A/s]
 
 int referenceType = 2;   //1.square 2.triangle 3.sin
 
-float sampleTimeSec=sampleTime/1000000;
+float sampleTimeSec=sampleTime/1000000.00;
 float stepRef = slopeRef*sampleTimeSec;
 float voltMotor = 0;
 float errorAct = 0;
@@ -106,12 +104,12 @@ void updateData(){
   }
   if(option=='R'){  //configurar referencia
     //R{referenceType},{referenceN},{period}
-    referenceType =Serial.parseFloat();
+    referenceType =int( Serial.parseFloat() );
     referenceN    =Serial.parseFloat();
     period        =Serial.parseFloat();
 
     referenceA = referenceN / Ka;
-    if(referenceType==2) updateStepRef();1
+    if(referenceType==2) updateStepRef();
   }
   Serial.readString(); //clear buffer
 }
@@ -123,14 +121,14 @@ void sentData(){
   Serial.print("\t");
   Serial.print(voltMotor,3);
   Serial.print("\t");
-  Serial.print(pulses,3);
+  Serial.print(pulses);
   Serial.print("\n");
 }
 
 void sampleProcess(){
   switch (referenceType){
     case 1: //Step Reference
-      if( ( samples%(period/sampleTimeSec) ) ==0 ){
+      if( ( samples%int(period/(sampleTimeSec*2) ) ) ==0 ){
         actualRef=referenceA*-1;
         referenceA=referenceA*-1;
       }
@@ -175,7 +173,6 @@ void sampleProcess(){
     ledcWrite(PWMChannelB,dutyPWM);
     ledcWrite(PWMChannelA,0);
   }
-  if (direction==0) pulses=pulses*(-1); 
 
   //Sent information
   sentData();
