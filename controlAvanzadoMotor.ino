@@ -115,12 +115,13 @@ void updateData(){
 }
 
 void sentData(){
+  //{actualRef},{out},{control},{pulses}
   Serial.print(actualRef*Ka,3);
-  Serial.print("\t");
+  Serial.print(",");
   Serial.print(current_A*Ka,3);
-  Serial.print("\t");
+  Serial.print(",");
   Serial.print(voltMotor,3);
-  Serial.print("\t");
+  Serial.print(",");
   Serial.print(pulses);
   Serial.print("\n");
 }
