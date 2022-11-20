@@ -11,3 +11,27 @@ Esto se logra de dos formas:
 
 Con los datos obtenidos se grafican las curvas de respuesta del motor, luego se aproximan las funciones de tranferencia con la herramienta system identification de Matlab
 
+
+## Conexiones
+
+
+```cpp
+//      **Puente H
+
+//Motor 1
+#define in1HBridge 4   //pin
+#define in2HBridge 2   //pin
+
+//Motor 2
+#define in3HBridge 16   //pin
+#define in4HBridge 17   //pin
+
+//      **Sensores hall
+
+//Motor 1
+#define hallSensorA 18    //pin
+//Motor 2
+#define hallSensorB 19    //pin
+
+```
+
