@@ -128,8 +128,6 @@ void IRAM_ATTR onTimer(){
   portEXIT_CRITICAL_ISR(&timerMux0);
 }
 
-
-
 void updateData(){
   char option=Serial.read();
 
@@ -137,9 +135,13 @@ void updateData(){
     //R{reference1},{reference2} [mA]
     actualRef1 =Serial.parseFloat()/1000.00 ;
     actualRef2 =Serial.parseFloat()/1000.00 ;
+    //flagStop=0;
   }
   if(option=='P'){
-    flagStop=!flagSample;
+    flagStop=1;
+    actualRef1 =0;
+    actualRef2 =0;
+
   }
   Serial.flush(); //clear buffer
 }
