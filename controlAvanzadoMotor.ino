@@ -20,9 +20,9 @@
 //      **Sensores hall
 
 //Motor 1
-#define hallSensorA 18    //pin
+#define hallSensor1 18    //pin
 //Motor 2
-#define hallSensorB 19    //pin
+#define hallSensor2 19    //pin
 
 #define timeMotor 1000     //(miliseconds) 
 #define VCC       12
@@ -134,14 +134,17 @@ void updateData(){
   char option=Serial.read();
 
   if(option=='R'){  //configurar referencia
-    //R{reference1},{reference2}
-    actualRef1 =Serial.parseFloat() ;
-    actualRef2 =Serial.parseFloat() ;
+    //R{reference1},{reference2} [mA]
+    actualRef1 =Serial.parseFloat()/1000.00 ;
+    actualRef2 =Serial.parseFloat()/1000.00 ;
   }
   if(option=='P'){
     flagStop=!flagSample;
   }
-  Serial.readString(); //clear buffer
+  Serial.flush(); //clear buffer
+}
+void serialEvent(){
+  updateData();
 }
 
 void sentData(){
@@ -187,7 +190,6 @@ void sampleProcess(){
   dutyPWM1 = abs(voltMotor1)*rangePWM/VCC;
   dutyPWM2 = abs(voltMotor2)*rangePWM/VCC;
 
-
   if(voltMotor1>0){
     //when PWMChannel2 = 0 positive current
     ledcWrite(PWMChannel2,0);
@@ -201,10 +203,10 @@ void sampleProcess(){
   if(voltMotor2>0){
     //when PWMChannel2 = 0 positive current
     ledcWrite(PWMChannel4,0);
-    ledcWrite(PWMChannel3,dutyPWM1);
+    ledcWrite(PWMChannel3,dutyPWM2);
   }
   else{
-    ledcWrite(PWMChannel4,dutyPWM1);
+    ledcWrite(PWMChannel4,dutyPWM2);
     ledcWrite(PWMChannel3,0);
   }
   //Sent information
@@ -215,7 +217,7 @@ void sampleProcess(){
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(230400);
   Serial.println("start setup");
   //current sensor
   Wire.begin();
@@ -226,8 +228,8 @@ void setup() {
   ina226_1.waitUntilConversionCompleted(); 
   ina226_2.waitUntilConversionCompleted(); 
   //hall Sensor (configure an interrupt to count pulses1 per sample)
-  attachInterrupt(hallSensorA, isr1, RISING);
-  attachInterrupt(hallSensorB, isr2, RISING);
+  attachInterrupt(hallSensor1, isr1, RISING);
+  attachInterrupt(hallSensor2, isr2, RISING);
   //start timer
   timer = timerBegin(0, 80, true);  
   // timer 0, MWDT clock period = 
