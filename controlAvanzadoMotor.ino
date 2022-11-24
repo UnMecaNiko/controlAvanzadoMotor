@@ -53,14 +53,14 @@ hw_timer_t * timer = NULL;
 
 volatile int samples=0;
 volatile bool flagSample=0;
-bool flagStop=1;
+bool flagStop=0;
 
 //    current sensor
 INA226_WE ina226_1 = INA226_WE(I2C_ADDRESS1);
 INA226_WE ina226_2 = INA226_WE(I2C_ADDRESS2);
 
-float current_A1 = 0.0;
-float current_A2 = 0.0;
+float current_A1 = 0.000;
+float current_A2 = 0.000;
 
 
 // *****    interrupt (isr)
@@ -73,8 +73,13 @@ portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 
 // float referenceN = 0.7;    //Newton * meter -Max: 0.84
 // float referenceA = referenceN / Ka;
-float actualRef1 = 0;
-float actualRef2 = 0;
+
+
+float actualRef1 = 0.00;
+float actualRef2 = 0.00;
+
+float refTheta1 =0.00;
+float refTheta2 =0.00;
 
 //float period =    10;
 //float slopeRef  = 4*referenceA/period;   //[A/s]
@@ -83,40 +88,48 @@ int referenceType = 2;   //1.square 2.triangle 3.sin
 
 float sampleTimeSec=sampleTime/1000000.00;
 //float stepRef = slopeRef*sampleTimeSec;
-float voltMotor1 = 0;
-float voltMotor2 = 0;
+float voltMotor1 = 0.000;
+float voltMotor2 = 0.000;
 
-volatile float signo1=1;
-volatile float signo2=1;
+float signo1=1.00;
+float signo2=1.00;
 
-float errorAct1 = 0;
-float errorAct2 = 0;
+float errorAct1 = 0.000;
+float errorAct2 = 0.000;
 
+float thetaerrorAct1=0.000;
+float thetaerrorAct2=0.000;
 
-float q0=   0;
+float q0=   0.00;
 float q1=   1.73875;
 float q2=	  -1.59513;
 float s0=   -0.9886;
 
-float error1[] ={0,0};
-float error2[] ={0,0};
+float error1[] ={0.000,0.000};
+float error2[] ={0.000,0.000};
 
-float out1[]   ={0,0};
-float out2[]   ={0,0};
+float out1[]   ={0.000,0.000};
+float out2[]  ={0.000,0.000};
+
+//control posicion
+float thetaerror1[] ={0.000,0.000};
+float thetaerror2[] ={0.000,0.000};
+
+float thetaout1[]   ={0.000,0.000};
+float thetaout2[]   ={0.000,0.000};
 
 
 float dutyPWM1 = 0;
 float dutyPWM2 = 0;
 
 
-float pos1=0.00;
-float pos2=0.00;
+float theta1=0.00;
+float theta2=0.00;
 
 void IRAM_ATTR isr1() {  
   // Interrupt Service Routine
   portENTER_CRITICAL(&synch);
   pulses1 += 1;
-  pos1=pos1+0.4196;
   portEXIT_CRITICAL(&synch);
 }
 
@@ -124,7 +137,6 @@ void IRAM_ATTR isr2() {
   // Interrupt Service Routine
   portENTER_CRITICAL(&synch);
   pulses2 += 1;
-  pos2=pos2+0.4196;
   portEXIT_CRITICAL(&synch);
 }
 
@@ -140,9 +152,9 @@ void updateData(){
   char option=Serial.read();
 
   if(option=='R'){  //configurar referencia
-    //R{reference1},{reference2} [mA]
-    actualRef1 =Serial.parseFloat()/1000.00 ;
-    actualRef2 =Serial.parseFloat()/1000.00 ;
+    //R{reference1},{reference2} [mGrados]
+    refTheta1 =Serial.parseFloat() ;
+    refTheta2 =Serial.parseFloat();
     flagStop=0;
   }
   if(option=='P'){
@@ -158,19 +170,56 @@ void sentData(){
   //{pulses1},{pulses2}
   if (samples%20==0 && !flagStop){
     Serial.print("V,");
-    Serial.print(int(pulses1*voltMotor1/abs(voltMotor1)));
-    Serial.print(",0");
+    Serial.print(theta1);
+    Serial.print(",");
+
+    Serial.print(actualRef1);
     //Serial.print(int(pulses2*voltMotor2/abs(voltMotor2)));
     Serial.print("\n");
   }
 }
 
 void sampleProcess(){
+  //control posicion
+  if (samples%2==0){
+    theta1=theta1+pulses1*0.4196*signo1;
+
+    pulses1=0;
+    pulses2=0;
+
+    
+
+    thetaerrorAct1=refTheta1-theta1;
+
+
+    //actualRef1 = thetaout1[0] + 17.162*thetaerrorAct1 - 29.484*thetaerror1[0] + 13.122*thetaerror1[1];
+    //q0*errorAct1+q1*error1[0]+q2*error1[1]-(s0-1)*out1[0]+s0*out1[1];
+    //actualRef1= thetaout1[0]+thetaerrorAct1*12;
+    actualRef1= (0.2*thetaerror1[0] - 0.18*thetaerror1[1] +0.96*thetaout1[0] +0.04*thetaout1[1])*0.55;
+    actualRef2= (0.2*thetaerror2[0] - 0.18*thetaerror1[1] +0.96*thetaout1[0] +0.04*thetaout1[1])*0.55;
+
+    //actualRef1=q0*errorAct1+cos*q1*thetaerror1[0]+cos*q2*thetaerror1[1]-(s0-1)*thetaout1[0]+s0*thetaout1[1];
+
+    thetaerror1[1]=thetaerror1[0];
+    thetaerror1[0]=thetaerrorAct1;
+    thetaout1[1]=thetaout1[0];
+    thetaout1[0]=actualRef1;
+
+    thetaerror2[1]=thetaerror2[0];
+    thetaerror2[0]=thetaerrorAct2;
+    thetaout2[1]=thetaout2[0];
+    thetaout2[0]=thetaerrorAct2;
+
+    if(actualRef1>1) actualRef1=1;
+    if(actualRef1<-1) actualRef1=-1;
+  }    
+  
   //Read sensor
   ina226_1.readAndClearFlags();
   ina226_2.readAndClearFlags();
   current_A1 = ina226_1.getCurrent_mA()/1000.0000;
-  current_A2 = ina226_2.getCurrent_mA()/1000.0000;
+  //current_A2 = ina226_2.getCurrent_mA()/1000.0000;
+  current_A2 =0;
   //Calculate error
   errorAct1=actualRef1-current_A1;
   errorAct2=actualRef2-current_A2;
@@ -179,8 +228,6 @@ void sampleProcess(){
   voltMotor1=q0*errorAct1+q1*error1[0]+q2*error1[1]-(s0-1)*out1[0]+s0*out1[1];
   voltMotor2=q0*errorAct2+q1*error2[0]+q2*error2[1]-(s0-1)*out2[0]+s0*out2[1];
 
-  signo1=voltMotor1/abs(voltMotor1);
-  signo2=voltMotor2/abs(voltMotor1);
   //Saturation
   if (voltMotor1>VCC) voltMotor1=VCC;
   if (voltMotor1<-VCC) voltMotor1=-VCC;
@@ -201,29 +248,32 @@ void sampleProcess(){
   dutyPWM2 = abs(voltMotor2)*rangePWM/VCC;
 
   if(voltMotor1>0){
+    signo1=1;
     //when PWMChannel2 = 0 positive current
     ledcWrite(PWMChannel2,0);
     ledcWrite(PWMChannel1,dutyPWM1);
   }
   else{
+    signo1=-1;
     ledcWrite(PWMChannel2,dutyPWM1);
     ledcWrite(PWMChannel1,0);
   }
 
   if(voltMotor2>0){
+    signo2=1;
     //when PWMChannel2 = 0 positive current
     ledcWrite(PWMChannel4,0);
     ledcWrite(PWMChannel3,dutyPWM2);
   }
   else{
+    signo2=-1;
     ledcWrite(PWMChannel4,dutyPWM2);
     ledcWrite(PWMChannel3,0);
   }
   //Sent information
   sentData();
   //Reset variables
-  pulses1=0;
-  pulses2=0;
+
 }
 
 void setup() {
