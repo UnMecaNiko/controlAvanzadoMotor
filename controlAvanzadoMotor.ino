@@ -1,8 +1,8 @@
 //    ************      includes
 #include <Wire.h>
 #include <INA226_WE.h>
-#define I2C_ADDRESS1 0x40
-#define I2C_ADDRESS2 0x41
+#define I2C_ADDRESS1 0x41
+#define I2C_ADDRESS2 0x40
 
 //    ************      parameters
 #define sampleTime 5000 //(usegs)
@@ -53,7 +53,7 @@ hw_timer_t * timer = NULL;
 
 volatile int samples=0;
 volatile bool flagSample=0;
-bool flagStop=0;
+bool flagStop=1;
 
 //    current sensor
 INA226_WE ina226_1 = INA226_WE(I2C_ADDRESS1);
@@ -86,6 +86,9 @@ float sampleTimeSec=sampleTime/1000000.00;
 float voltMotor1 = 0;
 float voltMotor2 = 0;
 
+volatile float signo1=1;
+volatile float signo2=1;
+
 float errorAct1 = 0;
 float errorAct2 = 0;
 
@@ -106,10 +109,14 @@ float dutyPWM1 = 0;
 float dutyPWM2 = 0;
 
 
+float pos1=0.00;
+float pos2=0.00;
+
 void IRAM_ATTR isr1() {  
   // Interrupt Service Routine
   portENTER_CRITICAL(&synch);
   pulses1 += 1;
+  pos1=pos1+0.4196;
   portEXIT_CRITICAL(&synch);
 }
 
@@ -117,6 +124,7 @@ void IRAM_ATTR isr2() {
   // Interrupt Service Routine
   portENTER_CRITICAL(&synch);
   pulses2 += 1;
+  pos2=pos2+0.4196;
   portEXIT_CRITICAL(&synch);
 }
 
@@ -135,26 +143,24 @@ void updateData(){
     //R{reference1},{reference2} [mA]
     actualRef1 =Serial.parseFloat()/1000.00 ;
     actualRef2 =Serial.parseFloat()/1000.00 ;
-    //flagStop=0;
+    flagStop=0;
   }
   if(option=='P'){
     flagStop=1;
-    actualRef1 =0;
-    actualRef2 =0;
-
+    actualRef1 =0.00;
+    actualRef2 =0.00;
+    
   }
   Serial.flush(); //clear buffer
-}
-void serialEvent(){
-  updateData();
 }
 
 void sentData(){
   //{pulses1},{pulses2}
-  if (samples%10==0){
-    Serial.print(pulses1);
-    Serial.print(",");
-    Serial.print(pulses2);
+  if (samples%20==0 && !flagStop){
+    Serial.print("V,");
+    Serial.print(int(pulses1*voltMotor1/abs(voltMotor1)));
+    Serial.print(",0");
+    //Serial.print(int(pulses2*voltMotor2/abs(voltMotor2)));
     Serial.print("\n");
   }
 }
@@ -173,6 +179,8 @@ void sampleProcess(){
   voltMotor1=q0*errorAct1+q1*error1[0]+q2*error1[1]-(s0-1)*out1[0]+s0*out1[1];
   voltMotor2=q0*errorAct2+q1*error2[0]+q2*error2[1]-(s0-1)*out2[0]+s0*out2[1];
 
+  signo1=voltMotor1/abs(voltMotor1);
+  signo2=voltMotor2/abs(voltMotor1);
   //Saturation
   if (voltMotor1>VCC) voltMotor1=VCC;
   if (voltMotor1<-VCC) voltMotor1=-VCC;
@@ -228,7 +236,7 @@ void setup() {
 
   //if you comment this line the first data might be zero
   ina226_1.waitUntilConversionCompleted(); 
-  ina226_2.waitUntilConversionCompleted(); 
+  //ina226_2.waitUntilConversionCompleted(); 
   //hall Sensor (configure an interrupt to count pulses1 per sample)
   attachInterrupt(hallSensor1, isr1, RISING);
   attachInterrupt(hallSensor2, isr2, RISING);
@@ -259,7 +267,7 @@ void loop() {
   if(Serial.available() > 0) {
     updateData();
   }  
-  if(flagSample && !flagStop) { //script when a sample is made
+  if(flagSample) { //script when a sample is made
     sampleProcess();
     flagSample=0;
   }
