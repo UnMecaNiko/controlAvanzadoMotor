@@ -1,8 +1,8 @@
 //    ************      includes
 #include <Wire.h>
 #include <INA226_WE.h>
-#define I2C_ADDRESS1 0x41
-#define I2C_ADDRESS2 0x40
+#define I2C_ADDRESS1 0x40
+#define I2C_ADDRESS2 0x41
 
 //    ************      parameters
 #define sampleTime 5000 //(usegs)
@@ -74,7 +74,6 @@ portMUX_TYPE timerMux0 = portMUX_INITIALIZER_UNLOCKED;
 // float referenceN = 0.7;    //Newton * meter -Max: 0.84
 // float referenceA = referenceN / Ka;
 
-
 float actualRef1 = 0.00;
 float actualRef2 = 0.00;
 
@@ -118,10 +117,8 @@ float thetaerror2[] ={0.000,0.000};
 float thetaout1[]   ={0.000,0.000};
 float thetaout2[]   ={0.000,0.000};
 
-
 float dutyPWM1 = 0;
 float dutyPWM2 = 0;
-
 
 float theta1=0.00;
 float theta2=0.00;
@@ -172,8 +169,7 @@ void sentData(){
     Serial.print("V,");
     Serial.print(theta1);
     Serial.print(",");
-
-    Serial.print(actualRef1);
+    Serial.print(theta2);
     //Serial.print(int(pulses2*voltMotor2/abs(voltMotor2)));
     Serial.print("\n");
   }
@@ -182,24 +178,22 @@ void sentData(){
 void sampleProcess(){
   //control posicion
   if (samples%2==0){
-    theta1=theta1+pulses1*0.4196*signo1;
+    //theta1=theta1+pulses1*0.4196*signo1;
+    theta1=theta1+pulses1*0.2098*signo1;
+    theta2=theta2+pulses2*0.2098*signo2;
 
     pulses1=0;
     pulses2=0;
 
-    
-
     thetaerrorAct1=refTheta1-theta1;
-
-
+    thetaerrorAct2=refTheta2-theta2;
     //actualRef1 = thetaout1[0] + 17.162*thetaerrorAct1 - 29.484*thetaerror1[0] + 13.122*thetaerror1[1];
     //q0*errorAct1+q1*error1[0]+q2*error1[1]-(s0-1)*out1[0]+s0*out1[1];
     //actualRef1= thetaout1[0]+thetaerrorAct1*12;
     actualRef1= (0.2*thetaerror1[0] - 0.18*thetaerror1[1] +0.96*thetaout1[0] +0.04*thetaout1[1])*0.55;
-    actualRef2= (0.2*thetaerror2[0] - 0.18*thetaerror1[1] +0.96*thetaout1[0] +0.04*thetaout1[1])*0.55;
+    actualRef2= (0.2*thetaerror2[0] - 0.18*thetaerror2[1] +0.96*thetaout2[0] +0.04*thetaout2[1])*0.55;
 
     //actualRef1=q0*errorAct1+cos*q1*thetaerror1[0]+cos*q2*thetaerror1[1]-(s0-1)*thetaout1[0]+s0*thetaout1[1];
-
     thetaerror1[1]=thetaerror1[0];
     thetaerror1[0]=thetaerrorAct1;
     thetaout1[1]=thetaout1[0];
@@ -212,6 +206,9 @@ void sampleProcess(){
 
     if(actualRef1>1) actualRef1=1;
     if(actualRef1<-1) actualRef1=-1;
+
+    if(actualRef1>2) actualRef1=2;
+    if(actualRef1<-2) actualRef1=-2;
   }    
   
   //Read sensor
@@ -285,8 +282,8 @@ void setup() {
   ina226_2.init();
 
   //if you comment this line the first data might be zero
-  ina226_1.waitUntilConversionCompleted(); 
-  //ina226_2.waitUntilConversionCompleted(); 
+  //ina226_1.waitUntilConversionCompleted(); 
+  ina226_2.waitUntilConversionCompleted(); 
   //hall Sensor (configure an interrupt to count pulses1 per sample)
   attachInterrupt(hallSensor1, isr1, RISING);
   attachInterrupt(hallSensor2, isr2, RISING);
